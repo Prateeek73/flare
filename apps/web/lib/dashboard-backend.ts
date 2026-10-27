@@ -119,10 +119,31 @@ export function dashboardBackend(req: DashboardRequest, env: DashboardEnvironmen
       );
     clientIp = address;
   }
+  // Self-hosted, the dashboard answers on whatever address reached it (its configured
+  // origin, a platform URL, a port forward). A write is accepted from a page of that same
+  // host: a cross-site page cannot make the browser send another site's Host.
+  const first = (name: string) => req.headers.get(name)?.split(',')[0]?.trim().toLowerCase() ?? '';
+  const reached = new URL(req.nextUrl.origin);
+  const host = first('x-forwarded-host') || first('host') || reached.host;
+  const scheme = first('x-forwarded-proto') || reached.protocol.slice(0, -1);
+  const atWebOrigin = !!config.webOrigin && new URL(config.webOrigin).host === host;
   return {
     mode: config.mode,
     expectedOrigin: config.webOrigin ?? req.nextUrl.origin,
-    secureCookies: config.mode === 'vercel' || (config.webOrigin ?? '').startsWith('https:'),
+    acceptsOrigin(origin: string | null) {
+      if (!origin) return false;
+      if (origin === (config.webOrigin ?? req.nextUrl.origin)) return true;
+      if (config.mode === 'vercel') return false;
+      try {
+        const url = new URL(origin);
+        return url.origin === origin && /^https?:$/.test(url.protocol) && url.host === host;
+      } catch {
+        return false;
+      }
+    },
+    secureCookies:
+      config.mode === 'vercel' ||
+      (atWebOrigin ? config.webOrigin!.startsWith('https:') : scheme === 'https'),
     maxRequestBytes: (config.mode === 'vercel' ? 4 : 40) * 1024 * 1024,
     async fetch(target: string, init: BackendRequest = {}) {
       if (!target.startsWith('/v1/') || target.includes('#') || /[\r\n]/.test(target))

@@ -37,9 +37,7 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
   }
   const cookieOptions = { ...options, secure: backend.secureCookies };
   if (!['GET', 'HEAD'].includes(req.method)) {
-    const origin = req.headers.get('origin');
-    const expected = backend.expectedOrigin;
-    if (origin !== expected)
+    if (!backend.acceptsOrigin(req.headers.get('origin')))
       return NextResponse.json(
         { message: 'Request origin does not match this dashboard' },
         { status: 403 },

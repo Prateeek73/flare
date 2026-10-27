@@ -26,7 +26,7 @@ async function handler(req: NextRequest, context: { params: Promise<{ path: stri
       { status: error instanceof DashboardProxyError ? error.status : 503 },
     );
   }
-  if (!['GET', 'HEAD'].includes(req.method) && req.headers.get('origin') !== backend.expectedOrigin)
+  if (!['GET', 'HEAD'].includes(req.method) && !backend.acceptsOrigin(req.headers.get('origin')))
     return NextResponse.json({ message: 'Invalid origin' }, { status: 403 });
   const authorization = req.headers.get('authorization');
   const body = ['GET', 'HEAD'].includes(req.method) ? undefined : await req.text();

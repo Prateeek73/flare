@@ -218,3 +218,48 @@ it('rejects response read failures instead of returning partial backend JSON', a
     'upstream read failed',
   );
 });
+it('self-hosted: accepts a write from the host it was reached on, and from no other site', () => {
+  const req = {
+    headers: new Headers({ 'x-forwarded-host': 'flare.example.org', 'x-forwarded-proto': 'http' }),
+    nextUrl: { origin: 'http://10.0.0.5:3000' },
+  };
+  const backend = dashboardBackend(req, { WEB_ORIGIN: 'https://dashboard.example.test' });
+  expect(backend.acceptsOrigin('http://flare.example.org')).toBe(true);
+  expect(backend.acceptsOrigin('https://dashboard.example.test')).toBe(true);
+  for (const origin of [
+    'https://evil.example.test',
+    'null',
+    '',
+    'http://flare.example.org/x',
+    'ftp://flare.example.org',
+  ])
+    expect(backend.acceptsOrigin(origin)).toBe(false);
+  expect(backend.acceptsOrigin(null)).toBe(false);
+  expect(backend.secureCookies).toBe(false);
+});
+it('self-hosted: secure cookies on its https origin and behind an https proxy', () => {
+  const at = (headers: Record<string, string>, origin: string) => ({
+    headers: new Headers(headers),
+    nextUrl: { origin },
+  });
+  const env = { WEB_ORIGIN: 'https://dashboard.example.test' };
+  expect(
+    dashboardBackend(at({ host: 'dashboard.example.test' }, 'http://dashboard.example.test'), env)
+      .secureCookies,
+  ).toBe(true);
+  expect(
+    dashboardBackend(
+      at({ host: 'other.example.org', 'x-forwarded-proto': 'https' }, 'http://other.example.org'),
+      env,
+    ).secureCookies,
+  ).toBe(true);
+  expect(
+    dashboardBackend(at({ host: 'other.example.org' }, 'http://other.example.org'), env)
+      .secureCookies,
+  ).toBe(false);
+});
+it('deployed: a write is accepted from the exact web origin only', () => {
+  const backend = dashboardBackend(request(), deployed);
+  expect(backend.acceptsOrigin(deployed.WEB_ORIGIN)).toBe(true);
+  expect(backend.acceptsOrigin('https://other.example.test')).toBe(false);
+});
