@@ -10,7 +10,30 @@ try {
     await tx`select pg_advisory_xact_lock(71940313)`;
     const [existing] = await tx`select id from organizations where slug = 'pareto-labs'`;
     if (existing) {
-      console.log('Pareto Labs already exists. Seed is non-destructive.');
+      // Non-destructive: only what an earlier seed could not set (Novu configured later), only
+      // on this organization's own environments, and never over a value already there.
+      let filled = 0;
+      const environments =
+        await tx`select id, name, novu_key_cipher, novu_application_id from environments where org_id = ${existing.id} and name in ('Development', 'Production')`;
+      for (const environment of environments) {
+        const novuKey =
+          process.env[
+            environment.name === 'Development'
+              ? 'NOVU_DEVELOPMENT_API_KEY'
+              : 'NOVU_PRODUCTION_API_KEY'
+          ];
+        if (novuKey && !environment.novu_key_cipher) {
+          await tx`update environments set novu_key_cipher = ${encrypt(novuKey, config.FLARE_ENCRYPTION_KEY, `${existing.id}/${environment.id}`)} where id = ${environment.id} and novu_key_cipher is null`;
+          filled++;
+        }
+        if (process.env.NOVU_APPLICATION_IDENTIFIER && !environment.novu_application_id) {
+          await tx`update environments set novu_application_id = ${process.env.NOVU_APPLICATION_IDENTIFIER} where id = ${environment.id} and novu_application_id is null`;
+          filled++;
+        }
+      }
+      console.log(
+        `Pareto Labs already exists. Seed is non-destructive${filled ? `; filled ${filled} missing Novu setting(s)` : ''}.`,
+      );
       return;
     }
     const [org] =

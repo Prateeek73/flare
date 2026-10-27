@@ -114,10 +114,14 @@ app.use(
 app.use(helmet());
 app.use(browserTransferCors);
 app.enableCors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000', credentials: true });
-const document = JSON.parse(
-  readFileSync(new URL('../../../docs/api/openapi.json', import.meta.url), 'utf8'),
-) as OpenAPIObject;
-SwaggerModule.setup('docs', app, document);
+// The interactive API reference is served only where it is asked for: a public deployment
+// does not hand every visitor a map of its routes. docs/api/openapi.json is in the repo.
+if (process.env.API_DOCS === 'true') {
+  const document = JSON.parse(
+    readFileSync(new URL('../../../docs/api/openapi.json', import.meta.url), 'utf8'),
+  ) as OpenAPIObject;
+  SwaggerModule.setup('docs', app, document);
+}
 // Attach Socket.IO after Nest installs its request listener and before accepting connections.
 await app.init();
 const inboxSocket = startDashboardInboxWebSocket(app.getHttpServer());
